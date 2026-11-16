@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Tem acesso quem:
+    //  1) entrou com e-mail CONFIRMADO, e
+    //  2) tem e-mail @veri.com.br, ou está cadastrado na coleção "equipe"
+    //     (ID do documento = e-mail em minúsculas; serve para pessoas de fora da empresa).
+    function emailConfirmado() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
+
+    function daEmpresa() {
+      return request.auth.token.email.lower().matches('.*@veri[.]com[.]br');
+    }
+
+    function naEquipe() {
+      return exists(/databases/$(database)/documents/equipe/$(request.auth.token.email.lower()));
+    }
+
+    function liberado() {
+      return emailConfirmado() && (daEmpresa() || naEquipe());
+    }
+
+    match /agendas/{id} {
+      allow read, write: if liberado();
+    }
+
+    match /config/{id} {
+      allow read, write: if liberado();
+    }
+
+    // A lista "equipe" só se edita pelo Console do Firebase
+    match /equipe/{id} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
